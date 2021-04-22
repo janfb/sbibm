@@ -29,6 +29,7 @@ def run(
     automatic_transforms_enabled: bool = False,
     z_score_x: bool = True,
     z_score_theta: bool = True,
+    cold: bool = False,
 ) -> Tuple[torch.Tensor, int, Optional[torch.Tensor]]:
     """Runs (S)NPE from `sbi`
 
@@ -103,7 +104,9 @@ def run(
         )
 
         density_estimator = inference_method.append_simulations(
-            theta, x, proposal=proposal
+            theta,
+            x,
+            proposal=prior if cold else proposal,
         ).train(
             num_atoms=num_atoms,
             training_batch_size=training_batch_size,
@@ -118,15 +121,21 @@ def run(
         proposal = posterior.set_default_x(observation)
         posteriors.append(posterior)
 
+    map_estimate = posteriors[-1].map()
     posterior = wrap_posterior(posteriors[-1], transforms)
 
-    assert simulator.num_simulations == num_simulations
+    # assert simulator.num_simulations == num_simulations
 
     samples = posterior.sample((num_samples,)).detach()
 
     if num_observation is not None:
         true_parameters = task.get_true_parameters(num_observation=num_observation)
         log_prob_true_parameters = posterior.log_prob(true_parameters)
-        return samples, simulator.num_simulations, log_prob_true_parameters
+        return (
+            samples,
+            simulator.num_simulations,
+            log_prob_true_parameters,
+            map_estimate,
+        )
     else:
         return samples, simulator.num_simulations, None
