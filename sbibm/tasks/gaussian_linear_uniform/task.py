@@ -13,7 +13,7 @@ from sbibm.tasks.task import Task
 
 class GaussianLinearUniform(Task):
     def __init__(
-        self, dim: int = 10, prior_bound: float = 1.0, simulator_scale: float = 0.1
+        self, dim: int = 10, prior_bound: float = 2.0, simulator_scale: float = 1.0
     ):
         """Gaussian Linear Uniform
 
@@ -35,6 +35,20 @@ class GaussianLinearUniform(Task):
             num_simulations=[100, 1000, 10000, 100000, 1000000],
             path=Path(__file__).parent.absolute(),
         )
+
+        # Set seeds for parameter to be in [-1, 1].
+        self.observation_seeds = [
+            1002238,
+            1002967,
+            1003891,
+            1004719,
+            1011529,
+            1015326,
+            1016688,
+            1019148,
+            1020686,
+            1026872,
+        ]
 
         self.prior_params = {
             "low": -prior_bound * torch.ones((self.dim_parameters,)),
@@ -59,8 +73,8 @@ class GaussianLinearUniform(Task):
         """Get function returning samples from simulator given parameters
 
         Args:
-            max_calls: Maximum number of function calls. Additional calls will 
-                result in SimulationBudgetExceeded exceptions. Defaults to None 
+            max_calls: Maximum number of function calls. Additional calls will
+                result in SimulationBudgetExceeded exceptions. Defaults to None
                 for infinite budget
 
         Return:
@@ -93,7 +107,7 @@ class GaussianLinearUniform(Task):
             num_observation: Observation number
             observation: Instead of passing an observation number, an observation may be
                 passed directly
-        
+
         Returns:
             Samples from reference posterior
         """
@@ -108,7 +122,8 @@ class GaussianLinearUniform(Task):
         reference_posterior_samples = []
 
         sampling_dist = pdist.MultivariateNormal(
-            loc=observation, precision_matrix=self.simulator_params["precision_matrix"],
+            loc=observation,
+            precision_matrix=self.simulator_params["precision_matrix"],
         )
 
         # Reject samples outside of prior bounds
@@ -116,7 +131,8 @@ class GaussianLinearUniform(Task):
         while len(reference_posterior_samples) < num_samples:
             counter += 1
             sample = sampling_dist.sample()
-            if not torch.isinf(self.prior_dist.log_prob(sample).sum()):
+
+            if self.prior_dist.support.check(sample):
                 reference_posterior_samples.append(sample)
 
         reference_posterior_samples = torch.cat(reference_posterior_samples)
@@ -131,4 +147,19 @@ class GaussianLinearUniform(Task):
 
 if __name__ == "__main__":
     task = GaussianLinearUniform()
+
+    # seeds = []
+    # i = 0
+    # while len(seeds) < 10:
+    #     seed = 1000000 + i
+    #     i += 1
+    #     np.random.seed(seed)
+    #     torch.manual_seed(seed)
+
+    #     prior = task.get_prior()
+    #     true_parameters = prior(num_samples=1)
+    #     x = task.get_simulator()(true_parameters)
+    #     if (x < 1.0).all() and (x > -1.0).all():
+    #         seeds.append(seed)
+    # print(seeds)
     task._setup()
